@@ -99,8 +99,9 @@ char word_in_dict(char ** dict, char * word, int size) {
 
 }
 
-void annotate_file(int fd, char ** dict, int size) {
+void annotate_file(char * fname, char ** dict, int size) {
 	// init the buffer and check the num bytes
+	int fd = open(fname, O_RDONLY);
 	char buf;
 	int bytes;
 
@@ -143,7 +144,7 @@ void annotate_file(int fd, char ** dict, int size) {
 }
 
 int main(int argc, char ** argv) {
-	if (argc < 2) {
+	if (argc < 3) {
 		printf("Please input a filename.");
 		return EXIT_FAILURE;
 	}
@@ -151,8 +152,7 @@ int main(int argc, char ** argv) {
 	int n_strings_in_arr = INITIAL_DICT_SIZE;
 	char ** dict = malloc(n_strings_in_arr * sizeof(char *));
 	int size = build_word_dict(argv[1], dict, INITIAL_DICT_SIZE, INITIAL_WORD_SIZE);
-	int fd = open(argv[2], O_RDONLY);
-	annotate_file(fd, dict, size);
+	annotate_file(argv[2], dict, size);
 
 	return EXIT_SUCCESS;
 }
