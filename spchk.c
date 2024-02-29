@@ -67,6 +67,13 @@ int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_
 	return idx;
 }
 
+void free_dict(char *** dict, int dict_size) {
+	for (int i = 0; i < dict_size; i++) {
+		free((*dict)[i]);
+	}
+	free((*dict));
+}
+
 int binary_search(char ** arr, char * target, int length) {
 	int left = 0;
 	int right = length - 1;
@@ -125,7 +132,6 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 		// we increment our column
 		// if we encounter a new line, then we need to move to the next row and reset our column
 
-		// CHANGE THIS 100 TO A MACRO
 		if (word_length == word_size) {
 			word_size *= 2;
 			current_word = realloc(current_word, word_size);
@@ -135,73 +141,31 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 			current_word[word_length++] = buf;
 		}
 
-		// if(charcount == 1 && linecount == 1 && !isspace(buf)) {
-			//printf("(%d, %d)", linecount, charcount);
-		// }
-
-		if (buf == '\n') {
-			// printf("\n");
-			linecount++;	
-
-			if (word_length > 0) {
-				//current_word[word_length] = '\0';
-				// printf("\n Found word |%s|\n", current_word);
-
-				//if (word_in_dict(dict, current_word, size)) {
-					// printf("Word in dictionary\n");
-				//}
-				//else {
-				//if (!word_in_dict(dict, current_word, size)) {
-					//printf("Word not found: (%d %d) |%s|\n", linecount, charcount, current_word);
-				//}
-
-				
-				check_word(current_word, word_length, dict, dict_size, linecount, charcount); 
-				reinitialize_word(current_word, word_size);
-				word_length = 0;
+		if (isspace(buf)) {
+			if (buf == '\n') {
+				linecount++;	
+				charcount = 1;
 			}
-
-			//prev_space = 1;
-			charcount = 1;
-		}
-		else if (isspace(buf)) {
-			charcount++;	
+			else {
+				charcount++;	
+			}
 			if (word_length > 0) {
-				// below is what the old code looked like prior to refactoring
-				//current_word[word_length] = '\0';
-				// printf("\n Found word |%s|\n", current_word);
-
-				//if(word_in_dict(dict, current_word, size)) {
-					// printf("Word in dictionary\n");
-				//}
-				//else {
-					//printf("Word not found: (%d %d) |%s|\n", linecount, charcount, current_word);
-				//}
-				// reinitialize_word(current_word, word_size);
 
 				check_word(current_word, word_length, dict, dict_size, linecount, charcount); 
 				reinitialize_word(current_word, word_size);
-				//current_word = NULL;
 
-				//current_word = malloc(word_size);
 				word_length = 0;
 			}
-			//prev_space = 1;
 		}
-		/*
-		else if (prev_space && !isspace(buf)) {
-			//printf("\n (%d, %d)", linecount, charcount);
-			//printf("%c", buf);
-			charcount++;
-			prev_space = 0;
-		}
-		*/
-		// if we get a space, then we encounter a word and hence we print the position
 		else {
-	 		//printf("%c", buf);
 			charcount++;
 		}
 	}
+
+	// close our fd
+	int out = close(fd);
+	// free any allocated memory that remains
+	free(current_word);
 }
 
 int main(int argc, char ** argv) {
@@ -225,6 +189,7 @@ int main(int argc, char ** argv) {
 	}
 	*/
 	annotate_file(argv[2], dict, size);
+	free_dict(&dict, size);
 
 	return EXIT_SUCCESS;
 }
