@@ -36,27 +36,31 @@ int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_
 	int word_size = initial_word_size;
 	
 	while((bytes = read(fd, &buf, 1)) > 0) {
-		// printf("%c", buf);
+		//printf("---new loop iter---\n");
 		if (idx == n_strings - 1) {
-			// printf("resized array\n");
+			//printf("resized array\n");
 			n_strings *= 2;
 			(*arr) = realloc((*arr), n_strings * sizeof(char *));
 		}
 		if ((*arr)[idx] == NULL) {
+			//printf("created new array\n");
 			(*arr)[idx] = malloc(word_size);
 		}
 		if (current_word_idx == word_size - 1) {
+			//printf("doubled array sized and realloced\n");
 			word_size *= 2;
 			(*arr)[idx] = realloc((*arr)[idx], word_size);
 		}
 		if (buf == '\n') {
 			(*arr)[idx][current_word_idx] = '\0';
-		//	printf("in this case\n");
+			//printf("encountered new line\n");
+			//printf("added word %s\n", (*arr)[idx]);
 			idx++;	
 			current_word_idx = 0;
 			word_size = initial_word_size;
 		}
 		else {
+			//printf("inserted character into buffer\n");
 			(*arr)[idx][current_word_idx++] = buf;
 		}
 
@@ -64,6 +68,15 @@ int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_
 		//printf("current array index: %d, current word idx: %d\n", idx, current_word_idx);
 	}
 	// debug
+	//printf("idx: %d", idx);
+	//if (arr == NULL) {
+	//	printf("NULL\n");
+	//}
+	//else {
+		//for (int i = 0; i < idx; i++) {
+		//	printf("%s\n", (*arr)[idx]);
+		//}
+	//}
 	return idx;
 }
 
@@ -168,6 +181,47 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 	free(current_word);
 }
 
+int check_if_txt(char * str1, char * str2) {
+	char * loc = strstr(str1, str2);
+	if (loc != NULL) {
+		if (*(loc + 4) == '\0') {
+			return 1;
+		}
+	}
+	return 0;
+}
+void scan_dir(char * path, char ** dict, int size) {
+	// open the directory and check for failure
+
+	DIR * handle = opendir(path);
+	char new_path[1000];
+
+	if (!handle) {
+		//perror(path);
+		return;
+	}
+
+
+	// create our struct that stores the info from readdir
+	struct dirent * de;
+	// print out all the directories that we traverse
+	while((de = readdir(handle))) {
+		char fstart[2] = {de->d_name[0], '\0'};
+		//if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
+		if (strcmp(fstart, ".") != 0 && check_if_txt(de->d_name, "txt") != 0) {
+			annotate_file(de->d_name, dict, size);
+
+			strcpy(new_path, path);
+			strcat(new_path, "/");
+			strcat(new_path, de->d_name);
+
+			scan_dir(new_path, dict, size);
+		}
+	}
+
+	closedir(handle);
+}
+
 int main(int argc, char ** argv) {
 	if (argc < 3) {
 		printf("Please input a filename.");
@@ -176,20 +230,34 @@ int main(int argc, char ** argv) {
 
 	char ** dict = malloc(INITIAL_DICT_SIZE * sizeof(char *));
 	int size = build_word_dict(argv[1], &dict, INITIAL_DICT_SIZE, INITIAL_WORD_SIZE);
+	//for (int k = 0; k < size; k++) {
+	//	printf("%s\n", dict[k]);
+	//}
 
-	/*
-	for (int i = 0; i < size; i++) {
-		if (dict[i] != NULL) {
-			printf("%s\n",dict[i]);
+	// check for directories here
+	// if we encounter a directory:
+	// 1. if the directory starts with . or .., remove these characters
+	// 2. send through recursive file traversal
+	// 3. if a file that we recurse through doesn't start with . and ends with .txt:
+	// 4. run program on that file
+	// 5. else
+	// 6. do nothing
+
+	for (int i = 2; i < argc; i++) {
+		DIR * handle = opendir(argv[i]);
+		if (handle == NULL) {
+			annotate_file(argv[i], dict, size);
 		}
 		else {
-			printf("failed\n");
-			break;
-		}
+			closedir(handle);
+			scan_dir(argv[i], dict, size);
+			//	
+		}	
 	}
-	*/
-	annotate_file(argv[2], dict, size);
+
 	free_dict(&dict, size);
 
 	return EXIT_SUCCESS;
+	
+	
 }
