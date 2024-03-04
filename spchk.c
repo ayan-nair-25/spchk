@@ -24,6 +24,12 @@
 // modify this to take the double char array as an input so we can avoid needing the struct
 // this isn't working, we need to introduce a triple pointer so that we can modify the actual double array that we pass in 
 // otherwise we need to init the double array inside this function and return this + word size in a struct, which is really inefficient for memory
+int strcmp_wrap(const void * s1, const void * s2) {
+	const char * ss1 = *(const char**) s1;
+    	const char * ss2 = *(const char**) s2;
+	return strcmp(ss1, ss2);
+}
+
 int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_size) {
 
 	int fd = open(fname, O_RDONLY);
@@ -67,6 +73,7 @@ int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_
 		//printf("\nloop succeeded\n");
 		//printf("current array index: %d, current word idx: %d\n", idx, current_word_idx);
 	}
+	qsort((*arr), idx, sizeof(char *), strcmp_wrap);
 	// debug
 	//printf("idx: %d", idx);
 	//if (arr == NULL) {
@@ -243,6 +250,7 @@ int main(int argc, char ** argv) {
 	// 5. else
 	// 6. do nothing
 
+	/*
 	for (int i = 2; i < argc; i++) {
 		DIR * handle = opendir(argv[i]);
 		if (handle == NULL) {
@@ -253,6 +261,11 @@ int main(int argc, char ** argv) {
 			scan_dir(argv[i], dict, size);
 			//	
 		}	
+	}
+	*/
+	printf("%d\n", size);
+	for (int i = 0; i < size; i++) {
+		printf("Word %s in dict: %d\n", dict[i],  word_in_dict(dict, dict[i], size));
 	}
 
 	free_dict(&dict, size);
