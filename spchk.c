@@ -118,9 +118,76 @@ int word_in_dict(char ** dict, char * word, int size) {
 	return !(out == -1);
 }
 
+int bracket_or_quote(char c) {
+	if (c == '\'' || c == '\"' || c == '(' || c == ')' || c == '[' || c == ']' || c == '(' || c == ')') {
+		return 1;	
+	}
+	return 0;
+}
+
+char * remove_extra_chars(char * word, int word_length) {
+	// two pointer to find where the word itself is
+	int start_ptr = 0;
+	int end_ptr = word_length - 1;
+
+	int found_front_alpha = 0;
+	int found_rear_alpha = 0;
+
+	int not_cleaned = 0;
+
+	
+	while (start_ptr < end_ptr) {
+		if (found_front_alpha && found_rear_alpha) {
+			break;	
+		}
+		else if (bracket_or_quote(word[start_ptr]) && ispunct(word[end_ptr]) && start_ptr == end_ptr - 1) {
+			not_cleaned = 1;
+			break;	
+		}
+
+		if (bracket_or_quote(word[start_ptr]) && !found_front_alpha) {
+			start_ptr++;	
+		}
+		else if (!bracket_or_quote(word[start_ptr])) {
+			found_front_alpha = 1;	
+		}
+
+		if (ispunct(word[end_ptr]) && !found_rear_alpha)  {
+			end_ptr--;	
+		}
+		else if (!ispunct(word[end_ptr])) {
+			found_rear_alpha = 1;
+		}
+	}
+
+	if (start_ptr >= end_ptr) {
+		not_cleaned = 1;	
+	}
+
+	char * cleaned_word = NULL;
+	if (!not_cleaned) {
+		// want all numbers between end ptr and start ptr inclusive, plus one for the null terminator
+		cleaned_word = malloc(end_ptr - start_ptr + 2);
+		for (int i = start_ptr; i <= end_ptr; i++) {
+			cleaned_word[i - start_ptr] = word[i];
+		}
+		cleaned_word[end_ptr - start_ptr + 1] = '\0';
+	}
+
+	/*
+	if (cleaned_word) {
+		printf("%s\n", cleaned_word);
+	}
+	else {
+		printf("NULL\n");
+	}
+	*/
+
+	return cleaned_word;
+}
+
 // need to include some way to keep track of each word, and put it into the dictionary to see if it is a word
 void check_word(char * word, int word_length, char ** dict, int dict_size, int linecount, int charcount) {
-	word[word_length] = '\0';
 	if(!word_in_dict(dict, word, dict_size)) {
 		printf("Word not found: (%d %d) |%s|\n", linecount, charcount, word);
 	}
@@ -131,6 +198,7 @@ void reinitialize_word(char * word, int word_size) {
 	word = NULL;
 	word = malloc(word_size);
 }
+
 
 void annotate_file(char * fname, char ** dict, int dict_size) {
 	// init the buffer and check the num bytes
@@ -157,7 +225,7 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 			current_word = realloc(current_word, word_size);
 		}
 
-		if (!isspace(buf) && !ispunct(buf)) {
+		if (!isspace(buf)) {
 			current_word[word_length++] = buf;
 		}
 
@@ -170,11 +238,16 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 				charcount++;	
 			}
 			if (word_length > 0) {
-
-				check_word(current_word, word_length, dict, dict_size, linecount, charcount); 
+				//char * parsed_word = remove_extra_chars(current_word, word_length);
+				current_word[word_length] = '\0';
+				char * cleaned_word = remove_extra_chars(current_word, word_length);
+				if (cleaned_word != NULL) {
+					check_word(cleaned_word, word_length, dict, dict_size, linecount, charcount); 
+				}
 				reinitialize_word(current_word, word_size);
 
 				word_length = 0;
+				free(cleaned_word);
 			}
 		}
 		else {
@@ -197,6 +270,7 @@ int check_if_txt(char * str1, char * str2) {
 	}
 	return 0;
 }
+
 void scan_dir(char * path, char ** dict, int size) {
 	// open the directory and check for failure
 
@@ -237,6 +311,12 @@ int main(int argc, char ** argv) {
 
 	char ** dict = malloc(INITIAL_DICT_SIZE * sizeof(char *));
 	int size = build_word_dict(argv[1], &dict, INITIAL_DICT_SIZE, INITIAL_WORD_SIZE);
+	// note:
+	// if superNormal in dict:
+		// accept superNormal, SuperNormal, SUPERNORMAL
+		// don't accept supernormal
+	// for hyphens: print the entire hyphenated word
+
 	//for (int k = 0; k < size; k++) {
 	//	printf("%s\n", dict[k]);
 	//}
@@ -251,6 +331,19 @@ int main(int argc, char ** argv) {
 	// 6. do nothing
 
 	/*
+
+	THINGS TO DO
+	-----------
+	- fix the output format
+		- bubble the path through each function so that we can print that as well in check word function
+	- account for capital letters and lowercase letters
+		- check that all captial words in the dictionary are also capital
+	- DEAL WITH TRAILING PUNCTUATION!!!!!!!!!! (done)
+	- deal with hyphenated words
+		- keep track of previous word size in hyphen so we can return the entire word when we print
+	- create larger buffer and read in bufsize elements at once, read from buffer 
+        */
+
 	for (int i = 2; i < argc; i++) {
 		DIR * handle = opendir(argv[i]);
 		if (handle == NULL) {
@@ -262,13 +355,26 @@ int main(int argc, char ** argv) {
 			//	
 		}	
 	}
-	*/
-	printf("%d\n", size);
+
+	/*
+	int wordNotInDict = 0;
+	printf("Dict size: %d\n", size);
 	for (int i = 0; i < size; i++) {
-		printf("Word %s in dict: %d\n", dict[i],  word_in_dict(dict, dict[i], size));
+		if (!word_in_dict(dict, dict[i], size)) {
+			printf("%s not in dict\n", dict[i]);
+			wordNotInDict = 1;
+		}
 	}
 
+	if(!wordNotInDict) {
+		printf("All words are in our dictionary\n");
+	}
+	*/
+
 	free_dict(&dict, size);
+	char * word = "((()));;;;;;;;";
+	remove_extra_chars(word, 14);
+
 
 	return EXIT_SUCCESS;
 	
