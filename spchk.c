@@ -30,6 +30,23 @@ int strcmp_wrap(const void * s1, const void * s2) {
 	return strcmp(ss1, ss2);
 }
 
+char * all_caps (char * str, int length) {
+	char * caps = (char *) malloc(length + 1);
+	for (int i = 0; i < length; i++) {
+		caps[i]	= toupper(str[i]);
+	}
+	caps[length] = '\0';
+	return caps;
+}
+
+char * capitalize (char * str, int length) {
+	char * dest = (char *) malloc(length + 1);
+	strcpy(dest, str);
+	dest[0] = toupper(dest[0]);
+
+	return dest;
+}
+
 int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_size) {
 
 	int fd = open(fname, O_RDONLY);
@@ -58,10 +75,36 @@ int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_
 			(*arr)[idx] = realloc((*arr)[idx], word_size);
 		}
 		if (buf == '\n') {
+			// add word itself
 			(*arr)[idx][current_word_idx] = '\0';
 			//printf("encountered new line\n");
 			//printf("added word %s\n", (*arr)[idx]);
 			idx++;	
+
+			if (idx == n_strings - 1) {
+				//printf("resized array\n");
+				n_strings *= 2;
+				(*arr) = realloc((*arr), n_strings * sizeof(char *));
+			}
+
+			// add capitalized word
+			//(*arr)[idx] = malloc(word_size);
+			(*arr)[idx] = capitalize((*arr)[idx - 1], current_word_idx);
+			//printf("added word %s\n", (*arr)[idx]);
+			idx++;
+
+			if (idx == n_strings - 1) {
+				//printf("resized array\n");
+				n_strings *= 2;
+				(*arr) = realloc((*arr), n_strings * sizeof(char *));
+			}
+
+			// add all caps word
+			//(*arr)[idx] = malloc(word_size);
+			(*arr)[idx] = all_caps((*arr)[idx - 2], current_word_idx);
+			//printf("added word %s\n", (*arr)[idx]);
+			idx++;
+
 			current_word_idx = 0;
 			word_size = initial_word_size;
 		}
@@ -94,16 +137,55 @@ void free_dict(char *** dict, int dict_size) {
 	free((*dict));
 }
 
+/*
+char * capitalize (char * str, int length) {
+	char * caps = (char *) malloc(length + 1);
+	for (int i = 0; i < length; i++) {
+		caps[i]	= toupper(str[i]);
+	}
+	caps[length] = '\0';
+	return caps;
+}
+*/
+
+int search_strcmp_wrap(char * target, char * compare) {
+	int length = strlen(compare);
+
+	char * dest = (char *) malloc(length + 1);
+	char * caps = NULL;
+
+	strcpy(dest, compare);
+
+	dest[0] = toupper(dest[0]);
+	caps = capitalize(compare, length);
+
+	int compare_to_word = strcmp(target, compare);
+	int compare_to_uppercase = strcmp(target, dest);
+	int compare_to_caps = strcmp(target, caps);
+
+	free(dest);
+	free(caps);
+
+	printf("|target: %s| |compare: %s| |compare: %d| |upper compare: %d| |caps compare: %d|", target, compare, compare_to_word, compare_to_uppercase, compare_to_caps);
+
+	if (compare_to_word == 0 || compare_to_uppercase == 0 || compare_to_caps == 0) {
+		return 0;	
+	}
+
+	return strcmp(target, compare);
+}
+
 int binary_search(char ** arr, char * target, int length) {
 	int left = 0;
 	int right = length - 1;
 
 	while (left <= right) {
 		int mid = ((int)(left + right)) / 2;
-		if (strcmp(target, arr[mid]) == 0) {
+		int cmp = strcmp(target, arr[mid]);
+		if (cmp == 0) {
 			return mid;	
 		}
-		else if (strcmp(target, arr[mid]) < 0) {
+		else if (cmp < 0) {
 			right = mid - 1;
 		}
 		else {
@@ -213,7 +295,10 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 	// this defines our row and column number
 	int charcount = 1;
 	int linecount = 1;
-	//char prev_space = 0;
+	int in_word = 0;
+
+	int word_start_charcount = 0;
+	int word_start_linecount = 0;
 
 	// while we still have bytes to read
 	while((bytes = read(fd, &buf, 1)) > 0) {
@@ -226,10 +311,29 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 		}
 
 		if (!isspace(buf)) {
+			if (!in_word) {
+				in_word = 1;
+				word_start_charcount = charcount;
+				word_start_linecount = linecount;
+			
+			}
 			current_word[word_length++] = buf;
+			charcount++;
 		}
+		else {
+			in_word = 0;
+			if (word_length > 0) {
+		
+				current_word[word_length] = '\0';
+				char * cleaned_word = remove_extra_chars(current_word, word_length);
+				if (cleaned_word != NULL) {
+					check_word(cleaned_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+				}
+				reinitialize_word(current_word, word_size);
 
-		if (isspace(buf)) {
+				word_length = 0;
+				free(cleaned_word);
+			}
 			if (buf == '\n') {
 				linecount++;	
 				charcount = 1;
@@ -237,21 +341,6 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 			else {
 				charcount++;	
 			}
-			if (word_length > 0) {
-				//char * parsed_word = remove_extra_chars(current_word, word_length);
-				current_word[word_length] = '\0';
-				char * cleaned_word = remove_extra_chars(current_word, word_length);
-				if (cleaned_word != NULL) {
-					check_word(cleaned_word, word_length, dict, dict_size, linecount, charcount); 
-				}
-				reinitialize_word(current_word, word_size);
-
-				word_length = 0;
-				free(cleaned_word);
-			}
-		}
-		else {
-			charcount++;
 		}
 	}
 
@@ -338,6 +427,8 @@ int main(int argc, char ** argv) {
 		- bubble the path through each function so that we can print that as well in check word function
 	- account for capital letters and lowercase letters
 		- check that all captial words in the dictionary are also capital
+		- create our own binary search strcmp function that compares character by character, accounting for our nuances in capitalization
+		(done)
 	- DEAL WITH TRAILING PUNCTUATION!!!!!!!!!! (done)
 	- deal with hyphenated words
 		- keep track of previous word size in hyphen so we can return the entire word when we print
@@ -372,9 +463,6 @@ int main(int argc, char ** argv) {
 	*/
 
 	free_dict(&dict, size);
-	char * word = "((()));;;;;;;;";
-	remove_extra_chars(word, 14);
-
 
 	return EXIT_SUCCESS;
 	
