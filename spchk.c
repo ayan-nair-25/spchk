@@ -19,6 +19,8 @@
 #define INITIAL_DICT_SIZE 10
 #define FILE_INITIAL_WORD_SIZE 100
 
+int error_in_annotate = 0;
+
 // to read the file and annotate position of words:
 
 // modify this to take the double char array as an input so we can avoid needing the struct
@@ -269,10 +271,17 @@ char * remove_extra_chars(char * word, int word_length) {
 }
 
 // need to include some way to keep track of each word, and put it into the dictionary to see if it is a word
-void check_word(char * word, int word_length, char ** dict, int dict_size, int linecount, int charcount) {
-	if(!word_in_dict(dict, word, dict_size)) {
-		printf("Word not found: (%d %d) |%s|\n", linecount, charcount, word);
+int check_word(char * word, int word_length, char ** dict, int dict_size, int linecount, int charcount, char * fname) {
+	int in_dict = word_in_dict(dict, word, dict_size);
+	if(!in_dict) {
+		printf("%s (%d %d): %s\n", fname, linecount, charcount, word);
 	}
+	return in_dict;
+}
+
+int check_component_word(char * word, int word_length, char ** dict, int dict_size, int linecount, int charcount) {
+	int in_dict = word_in_dict(dict, word, dict_size);
+	return in_dict;
 }
 
 void reinitialize_word(char * word, int word_size) {
@@ -281,10 +290,22 @@ void reinitialize_word(char * word, int word_size) {
 	word = malloc(word_size);
 }
 
+void copy_component(char * component, char * current_word, int component_start, int current_word_length) {
+	for (int i = component_start; i < current_word_length; i++) {
+		component[i - component_start] = current_word[i];
+	}
+}
 
-void annotate_file(char * fname, char ** dict, int dict_size) {
+
+int annotate_file(char * fname, char ** dict, int dict_size) {
 	// init the buffer and check the num bytes
 	int fd = open(fname, O_RDONLY);
+	if (fd == -1) {
+		return 0;
+	}
+
+	int ret = 1;
+
 	char buf;
 	int bytes;
 
@@ -295,7 +316,12 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 	// this defines our row and column number
 	int charcount = 1;
 	int linecount = 1;
+
 	int in_word = 0;
+
+	int hyphens_correct = 1;
+	int in_hyphenated_word = 0;
+	int component_word_start = 0;
 
 	int word_start_charcount = 0;
 	int word_start_linecount = 0;
@@ -317,22 +343,69 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 				word_start_linecount = linecount;
 			
 			}
+			if (buf == '-') {
+				if (word_length > 0 && hyphens_correct) {
+					in_hyphenated_word = 1;
+					char * component_word = malloc(word_length + 1);
+					copy_component(component_word, current_word, component_word_start, word_length);
+					component_word[word_length] = '\0';
+					
+					component_word_start = word_length + 1;
+
+
+
+					int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+					hyphens_correct = in_dict;
+
+					free(component_word);
+				}
+			}
 			current_word[word_length++] = buf;
 			charcount++;
 		}
 		else {
 			in_word = 0;
+			current_word[word_length] = '\0';
 			if (word_length > 0) {
-		
-				current_word[word_length] = '\0';
-				char * cleaned_word = remove_extra_chars(current_word, word_length);
-				if (cleaned_word != NULL) {
-					check_word(cleaned_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
-				}
-				reinitialize_word(current_word, word_size);
+				if (hyphens_correct && in_hyphenated_word) {
+					char * component_word = malloc(word_length + 1);
+					copy_component(component_word, current_word, component_word_start, word_length);
+					component_word[word_length] = '\0';
+					
+					int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+					hyphens_correct = in_dict;
 
+					free(component_word);
+					component_word_start = 0;
+					//printf("after checking full word, hyphens_correct = %d\n", hyphens_correct);
+				}
+
+				if (in_hyphenated_word) {
+					if (!hyphens_correct) {
+						//printf("checking the full word bc hyphens_correct = 0\n");
+						int in_dict = check_word(current_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount, fname);
+						if (ret != 0) {
+							// printf("current word: %s in dict: %d\n", current_word, in_dict);
+							ret = in_dict;
+						}
+					}
+				}
+				else {
+					//printf("not in hyphenated word so checking current_word\n");
+					char * cleaned_word = remove_extra_chars(current_word, word_length);
+					if (cleaned_word != NULL) {
+						int in_dict = check_word(cleaned_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount, fname); 
+						if (ret != 0) {
+							// printf("current word: %s in dict: %d\n", current_word, in_dict);
+							ret = in_dict;
+						}
+					}
+					free(cleaned_word);
+				}
+
+				reinitialize_word(current_word, word_size);
 				word_length = 0;
-				free(cleaned_word);
+
 			}
 			if (buf == '\n') {
 				linecount++;	
@@ -341,13 +414,16 @@ void annotate_file(char * fname, char ** dict, int dict_size) {
 			else {
 				charcount++;	
 			}
+
+			hyphens_correct = 1;
+			in_hyphenated_word = 0;
 		}
 	}
-
 	// close our fd
 	int out = close(fd);
 	// free any allocated memory that remains
 	free(current_word);
+	return ret;
 }
 
 int check_if_txt(char * str1, char * str2) {
@@ -360,7 +436,7 @@ int check_if_txt(char * str1, char * str2) {
 	return 0;
 }
 
-void scan_dir(char * path, char ** dict, int size) {
+int scan_dir(char * path, char ** dict, int size, int is_correct) {
 	// open the directory and check for failure
 
 	DIR * handle = opendir(path);
@@ -376,20 +452,31 @@ void scan_dir(char * path, char ** dict, int size) {
 	struct dirent * de;
 	// print out all the directories that we traverse
 	while((de = readdir(handle))) {
+		// printf("current dir being traversed: %s\n", de->d_name);
 		char fstart[2] = {de->d_name[0], '\0'};
 		//if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
 		if (strcmp(fstart, ".") != 0 && check_if_txt(de->d_name, "txt") != 0) {
-			annotate_file(de->d_name, dict, size);
 
 			strcpy(new_path, path);
 			strcat(new_path, "/");
 			strcat(new_path, de->d_name);
 
-			scan_dir(new_path, dict, size);
+			int ret = annotate_file(new_path, dict, size);
+			is_correct = (is_correct && ret);
+			// printf("8=====>: %d\n", is_correct);
+			// scan_dir(new_path, dict, size);
+		}
+		else if (strcmp(fstart, ".") != 0) {
+			strcpy(new_path, path);
+			strcat(new_path, "/");
+			strcat(new_path, de->d_name);
+			
+			scan_dir(new_path, dict, size, is_correct);
 		}
 	}
 
 	closedir(handle);
+	return is_correct;
 }
 
 int main(int argc, char ** argv) {
@@ -431,19 +518,31 @@ int main(int argc, char ** argv) {
 		(done)
 	- DEAL WITH TRAILING PUNCTUATION!!!!!!!!!! (done)
 	- deal with hyphenated words
-		- keep track of previous word size in hyphen so we can return the entire word when we print
+		- boolean value that stores if we have encountered a hyphen in the word, keep track of the hyphen indices
+		- for each hyphen index, check the word
+		- but pass in the linecount and wordcount of the entire hyphenated word
 	- create larger buffer and read in bufsize elements at once, read from buffer 
         */
 
 	for (int i = 2; i < argc; i++) {
 		DIR * handle = opendir(argv[i]);
 		if (handle == NULL) {
-			annotate_file(argv[i], dict, size);
+			int ret = annotate_file(argv[i], dict, size);
+			if (ret == 0) {
+				printf("EXIT FAILURE\n");
+				free_dict(&dict, size);
+				return EXIT_FAILURE;	
+			}
 		}
 		else {
 			closedir(handle);
-			scan_dir(argv[i], dict, size);
-			//	
+			//printf("scanning dir %s\n", argv[i]);
+			int ret = scan_dir(argv[i], dict, size, 1);
+			if (ret == 0) {
+				printf("EXIT FAILURE\n");
+				free_dict(&dict, size);
+				return EXIT_FAILURE;	
+			}
 		}	
 	}
 
@@ -464,6 +563,7 @@ int main(int argc, char ** argv) {
 
 	free_dict(&dict, size);
 
+	printf("EXIT SUCCESS\n");
 	return EXIT_SUCCESS;
 	
 	
