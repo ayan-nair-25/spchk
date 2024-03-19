@@ -486,13 +486,27 @@ int annotate_file(char * fname, char ** dict, int dict_size) {
 }
 
 int check_if_txt(char * str1, char * str2) {
+	char * ext = strrchr(str1, '.');
+	if (!ext) {
+		return 0;
+	} else {
+	    //printf("extension is %s\n", ext + 1);
+
+	    if (strcmp(ext + 1, "txt") == 0) {
+	   	return 1; 
+	    }
+	    return 0;
+	}
+	/*
 	char * loc = strstr(str1, str2);
+	printf("detected %s as loc\n", loc);
 	if (loc != NULL) {
-		if (*(loc + 4) == '\0') {
+		if (*(loc + 5) == '\0') {
 			return 1;
 		}
 	}
 	return 0;
+	*/
 }
 
 int scan_dir(char * path, char ** dict, int size, int is_correct) {
@@ -510,18 +524,17 @@ int scan_dir(char * path, char ** dict, int size, int is_correct) {
 	struct dirent * de;
 	// print out all the directories that we traverse
 	while((de = readdir(handle))) {
-		// printf("current dir being traversed: %s\n", de->d_name);
 		char fstart[2] = {de->d_name[0], '\0'};
-		//if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
+		//printf("result of if statement: condition 1 %d, condition 2 %d\n\n",  (strcmp(fstart, ".")), check_if_txt(de->d_name, ".txt") != 0);
 		if (strcmp(fstart, ".") != 0 && check_if_txt(de->d_name, "txt") != 0) {
 
 			strcpy(new_path, path);
 			strcat(new_path, "/");
 			strcat(new_path, de->d_name);
+			//printf("checking text file %s\n", new_path);
 
 			int ret = annotate_file(new_path, dict, size);
 			is_correct = (is_correct && ret);
-			// printf("8=====>: %d\n", is_correct);
 			// scan_dir(new_path, dict, size);
 		}
 		else if (strcmp(fstart, ".") != 0) {
@@ -539,13 +552,14 @@ int scan_dir(char * path, char ** dict, int size, int is_correct) {
 
 int main(int argc, char ** argv) {
 	if (argc < 3) {
-		printf("Please input a filename.");
+		fprintf(stderr, "Please input a filename.");
 		return EXIT_FAILURE;
 	}
 
 	char ** dict = malloc(INITIAL_DICT_SIZE * sizeof(char *));
 	int size = build_word_dict(argv[1], &dict, INITIAL_DICT_SIZE, INITIAL_WORD_SIZE);
 	if (size == -1) {
+		//printf("EXIT FAILURE\n");
 		free(dict);
 		return EXIT_FAILURE;
 	}
@@ -586,14 +600,13 @@ int main(int argc, char ** argv) {
 	- create larger buffer and read in bufsize elements at once, read from buffer 
         */
 
+	int print_stderr = 0;
 	for (int i = 2; i < argc; i++) {
 		DIR * handle = opendir(argv[i]);
 		if (handle == NULL) {
 			int ret = annotate_file(argv[i], dict, size);
 			if (ret == 0) {
-				//printf("EXIT FAILURE\n");
-				free_dict(&dict, size);
-				return EXIT_FAILURE;	
+				print_stderr = 1;
 			}
 		}
 		else {
@@ -601,11 +614,20 @@ int main(int argc, char ** argv) {
 			//printf("scanning dir %s\n", argv[i]);
 			int ret = scan_dir(argv[i], dict, size, 1);
 			if (ret == 0) {
+				print_stderr = 1;
+			}
+			/*
+			if (ret == 0) {
 				//printf("EXIT FAILURE\n");
 				free_dict(&dict, size);
 				return EXIT_FAILURE;	
 			}
+			*/
 		}	
+	}
+	if (print_stderr == 1) {
+		free_dict(&dict, size);
+		return EXIT_FAILURE;	
 	}
 
 	/*
@@ -625,7 +647,6 @@ int main(int argc, char ** argv) {
 
 	free_dict(&dict, size);
 
-//	printf("EXIT SUCCESS\n");
 	return EXIT_SUCCESS;
 	
 	
