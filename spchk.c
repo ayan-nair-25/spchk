@@ -19,39 +19,53 @@
 #define INITIAL_DICT_SIZE 10
 #define FILE_INITIAL_WORD_SIZE 100
 
-int error_in_annotate = 0;
-
 // to read the file and annotate position of words:
 
 // modify this to take the double char array as an input so we can avoid needing the struct
 // this isn't working, we need to introduce a triple pointer so that we can modify the actual double array that we pass in 
 // otherwise we need to init the double array inside this function and return this + word size in a struct, which is really inefficient for memory
+
+// make wrapper so that we can use strcmp with the strings in our dictionary to sort
+// used with qsort specifically
 int strcmp_wrap(const void * s1, const void * s2) {
+	// because strcmp takes const char as an input, we typecast each arg to const char
 	const char * ss1 = *(const char**) s1;
     	const char * ss2 = *(const char**) s2;
 	return strcmp(ss1, ss2);
 }
 
+// convert word to all caps so that we can put the all caps version in the dictionary
 char * all_caps (char * str, int length) {
+	// initialize a string to hold the all caps word
 	char * caps = (char *) malloc(length + 1);
+	// convert each character from the input string to caps using toupper
 	for (int i = 0; i < length; i++) {
 		caps[i]	= toupper(str[i]);
 	}
+	// null terminate and return
 	caps[length] = '\0';
 	return caps;
 }
 
+// capitalize the first character in the string
 char * capitalize (char * str, int length) {
+	// create the container string
 	char * dest = (char *) malloc(length + 1);
+	// copy original string to container
 	strcpy(dest, str);
+	// capialize the first word
 	dest[0] = toupper(dest[0]);
-
 	return dest;
 }
 
+// build the dictionary
 int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_size) {
-
+	// create the file descriptor
 	int fd = open(fname, O_RDONLY);
+	if (fd == -1) {
+		fprintf(stderr, "Error in opening file %s\n", fname);
+		return -1;	
+	}
 
 	int bytes;
 	char buf;
@@ -203,7 +217,8 @@ int word_in_dict(char ** dict, char * word, int size) {
 }
 
 int bracket_or_quote(char c) {
-	if (c == '\'' || c == '\"' || c == '(' || c == ')' || c == '[' || c == ']' || c == '(' || c == ')') {
+	//if (c == '\'' || c == '\"' || c == '(' || c == ')' || c == '[' || c == ']' || c == '(' || c == ')') {
+	if (c == '\'' || c == '\"' || c == '('  || c == '[' || c == '(') {
 		return 1;	
 	}
 	return 0;
@@ -296,11 +311,21 @@ void copy_component(char * component, char * current_word, int component_start, 
 	}
 }
 
+char * make_component_word(char * current_word, int component_word_start, int word_length) {
+
+	char * component_word = malloc(word_length + 1);
+	copy_component(component_word, current_word, component_word_start, word_length);
+	component_word[word_length] = '\0';
+
+	return component_word;
+
+}
 
 int annotate_file(char * fname, char ** dict, int dict_size) {
 	// init the buffer and check the num bytes
 	int fd = open(fname, O_RDONLY);
 	if (fd == -1) {
+		fprintf(stderr, "Error in opening file %s\n", fname);
 		return 0;
 	}
 
@@ -345,14 +370,11 @@ int annotate_file(char * fname, char ** dict, int dict_size) {
 			}
 			if (buf == '-') {
 				if (word_length > 0 && hyphens_correct) {
+
 					in_hyphenated_word = 1;
-					char * component_word = malloc(word_length + 1);
-					copy_component(component_word, current_word, component_word_start, word_length);
-					component_word[word_length] = '\0';
-					
+
+					char * component_word = make_component_word(current_word, component_word_start, word_length);
 					component_word_start = word_length + 1;
-
-
 
 					int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
 					hyphens_correct = in_dict;
@@ -368,9 +390,7 @@ int annotate_file(char * fname, char ** dict, int dict_size) {
 			current_word[word_length] = '\0';
 			if (word_length > 0) {
 				if (hyphens_correct && in_hyphenated_word) {
-					char * component_word = malloc(word_length + 1);
-					copy_component(component_word, current_word, component_word_start, word_length);
-					component_word[word_length] = '\0';
+					char * component_word = make_component_word(current_word, component_word_start, word_length);
 					
 					int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
 					hyphens_correct = in_dict;
@@ -447,7 +467,6 @@ int scan_dir(char * path, char ** dict, int size, int is_correct) {
 		return;
 	}
 
-
 	// create our struct that stores the info from readdir
 	struct dirent * de;
 	// print out all the directories that we traverse
@@ -487,6 +506,10 @@ int main(int argc, char ** argv) {
 
 	char ** dict = malloc(INITIAL_DICT_SIZE * sizeof(char *));
 	int size = build_word_dict(argv[1], &dict, INITIAL_DICT_SIZE, INITIAL_WORD_SIZE);
+	if (size == -1) {
+		free(dict);
+		return EXIT_FAILURE;
+	}
 	// note:
 	// if superNormal in dict:
 		// accept superNormal, SuperNormal, SUPERNORMAL
@@ -529,7 +552,7 @@ int main(int argc, char ** argv) {
 		if (handle == NULL) {
 			int ret = annotate_file(argv[i], dict, size);
 			if (ret == 0) {
-				printf("EXIT FAILURE\n");
+				//printf("EXIT FAILURE\n");
 				free_dict(&dict, size);
 				return EXIT_FAILURE;	
 			}
@@ -539,7 +562,7 @@ int main(int argc, char ** argv) {
 			//printf("scanning dir %s\n", argv[i]);
 			int ret = scan_dir(argv[i], dict, size, 1);
 			if (ret == 0) {
-				printf("EXIT FAILURE\n");
+				//printf("EXIT FAILURE\n");
 				free_dict(&dict, size);
 				return EXIT_FAILURE;	
 			}
@@ -563,7 +586,7 @@ int main(int argc, char ** argv) {
 
 	free_dict(&dict, size);
 
-	printf("EXIT SUCCESS\n");
+//	printf("EXIT SUCCESS\n");
 	return EXIT_SUCCESS;
 	
 	
