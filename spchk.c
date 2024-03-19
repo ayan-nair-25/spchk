@@ -93,6 +93,7 @@ int build_word_dict(char * fname, char *** arr, int n_strings, int initial_word_
 		if (buf == '\n') {
 			// add word itself
 			(*arr)[idx][current_word_idx] = '\0';
+			//printf("added word %s to dict\n", (*arr)[idx]);
 			//printf("encountered new line\n");
 			//printf("added word %s\n", (*arr)[idx]);
 			idx++;	
@@ -374,28 +375,66 @@ int annotate_file(char * fname, char ** dict, int dict_size) {
 					in_hyphenated_word = 1;
 
 					char * component_word = make_component_word(current_word, component_word_start, word_length);
+
+					//printf("in hyphen, component word is %s\n", component_word);
+					char * cleaned_word = remove_extra_chars(component_word, word_length - component_word_start);
+					//printf("cleaned word and got %s\n", cleaned_word);
+					if (cleaned_word != NULL) {
+						int in_dict = check_component_word(cleaned_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+						//printf("%s: word in dict status is %d\n", cleaned_word, in_dict);
+						hyphens_correct = in_dict;
+					}
+					else {
+						//printf("hyphens correct set to 0\n");
+						hyphens_correct = 0;
+					}
+
 					component_word_start = word_length + 1;
 
-					int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
-					hyphens_correct = in_dict;
+					//int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+					//hyphens_correct = in_dict;
 
 					free(component_word);
+					free(cleaned_word);
 				}
 			}
 			current_word[word_length++] = buf;
 			charcount++;
 		}
 		else {
+			//printf("in else statement\n");
 			in_word = 0;
 			current_word[word_length] = '\0';
 			if (word_length > 0) {
+				//printf("word length > 0\n");
+				//printf("word stored is %s\n", current_word);
+				//printf("hyphens_correct: %d, in_hyphenated_word: %d\n", hyphens_correct, in_hyphenated_word);
 				if (hyphens_correct && in_hyphenated_word) {
 					char * component_word = make_component_word(current_word, component_word_start, word_length);
 					
-					int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
-					hyphens_correct = in_dict;
+					//printf("in hyphen, component word is %s\n", component_word);
+					char * cleaned_word = remove_extra_chars(component_word, word_length - component_word_start);
+					//printf("cleaned word and got %s\n", cleaned_word);
+					if (cleaned_word != NULL) {
+						int in_dict = check_component_word(cleaned_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+						hyphens_correct = in_dict;
+					}
+					else {
+						hyphens_correct = 0;
+					}
+
+					// add cleaned word
+					// char * cleaned_word = remove_extra_chars(component_word, word_length);
+					// if (cleaned_word != NULL) {
+						// int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+						// hyphens_correct = in_dict;
+					//}
+
+					// int in_dict = check_component_word(component_word, word_length, dict, dict_size, word_start_linecount, word_start_charcount); 
+					// hyphens_correct = in_dict;
 
 					free(component_word);
+					free(cleaned_word);
 					component_word_start = 0;
 					//printf("after checking full word, hyphens_correct = %d\n", hyphens_correct);
 				}
